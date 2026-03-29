@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SHADOW TRACKER | Audit Vocal PRO</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" type="image/png" href="icon.png">
+
+    <style>
+        :root { --bg: #050505; --accent: #FF003C; --font: 'Courier New', monospace; }
+        body { margin: 0; background: var(--bg); color: white; font-family: var(--font); height: 100vh; display: flex; flex-direction: column; overflow: hidden; touch-action: none; }
+        
+        /* Disclaimer Initial */
+        #disclaimer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; border: 2px solid var(--accent); margin: -2px; }
+        #start-btn { border: 1px solid var(--accent); color: white; background: var(--accent); padding: 20px 50px; font-size: 0.8rem; letter-spacing: 5px; text-transform: uppercase; cursor: pointer; font-weight: bold; box-shadow: 0 0 30px rgba(255, 0, 60, 0.3); }
+
+        /* Ecran Blocare (Paywall tip Codex) */
+        #paywall { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 3000; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; box-sizing: border-box; }
+        #paywall h2 { color: var(--accent); letter-spacing: 5px; margin-bottom: 20px; text-transform: uppercase; }
+        .btn-pay { background: #0070ba; color: white; padding: 15px 30px; text-decoration: none; font-weight: bold; border-radius: 5px; margin-bottom: 25px; display: inline-block; font-size: 0.8rem; border: none; cursor: pointer; }
+        .btn-request { background: #111; color: white; border: 1px solid #333; padding: 12px 25px; cursor: pointer; font-size: 0.7rem; margin-bottom: 30px; letter-spacing: 1px; }
+        input { background: #000; border: 1px solid var(--accent); color: white; padding: 15px; width: 280px; text-align: center; margin-bottom: 20px; outline: none; letter-spacing: 2px; text-transform: uppercase; }
+        .btn-activate { background: var(--accent); color: white; border: none; padding: 15px 40px; font-weight: bold; cursor: pointer; letter-spacing: 3px; }
+
+        /* UI Principal */
+        .header { padding: 30px; text-align: center; border-bottom: 1px solid #111; position: relative; }
+        .header h1 { font-size: 0.8rem; letter-spacing: 8px; color: #444; margin: 0; }
+        #status { font-size: 0.6rem; color: var(--accent); margin-top: 10px; letter-spacing: 2px; font-weight: bold; }
+        #ver-tag { position: absolute; top: 10px; right: 10px; font-size: 0.5rem; color: #333; letter-spacing: 2px; }
+
+        /* Vizualizer Scena */
+        .viz-container { flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+        canvas { width: 100%; height: 350px; filter: drop-shadow(0 0 15px var(--accent)); }
+        .meter-ui { position: absolute; bottom: 80px; width: 85%; text-align: center; }
+        .shadow-meter { width: 100%; height: 1px; background: #222; overflow: visible; }
+        #fill { width: 0%; height: 100%; background: var(--accent); box-shadow: 0 0 40px var(--accent); transition: width 0.15s ease-out; }
+    </style>
+</head>
+<body>
+
+<div id="paywall">
+    <h2>LICENȚĂ RESTRICȚIONATĂ</h2>
+    <p style="color:#666; font-size: 0.7rem; margin-bottom: 20px; max-width: 300px;">LIMITA DE UTILIZARE GRATUITĂ A FOST ATINSĂ. EFECTUAȚI PLATA ȘI SOLICITAȚI CODUL PRO.</p>
+    
+    <a href="https://paypal.me/sambatalaopt" target="_blank" class="btn-pay">1. EFECTUEAZĂ PLATA (PAYPAL)</a>
+    
+    <button class="btn-request" onclick="sendSecureRequest()">2. SOLICITĂ COD ACTIVARE</button>
+    
+    <input type="text" id="activationCode" placeholder="INTRODU CODUL AICI">
+    <button class="btn-activate" onclick="verifyLicense()">ACTIVEAZĂ ACCES PRO</button>
+</div>
+
+<div id="disclaimer">
+    <h1 style="color:var(--accent); letter-spacing: 10px; margin-bottom: 30px; font-weight: 900;">SHADOW TRACKER</h1>
+    <p style="color:#444; font-size: 0.7rem; margin-bottom: 50px; letter-spacing: 2px;">AUDIT BIOMETRIC ACTIV. <br> PROPRIETATE SÂMBĂTĂ LA OPT.</p>
+    <button id="start-btn">INIȚIAZĂ SCANAREA</button>
+</div>
+
+<div class="header">
+    <span id="ver-tag">VER: STANDARD</span>
+    <h1>SHADOW TRACKER v1.0</h1>
+    <div id="status">SISTEM ÎN AȘTEPTARE...</div>
+</div>
+
+<div class="viz-container">
+    <canvas id="osc"></canvas>
+    <div class="meter-ui">
+        <div style="font-size: 0.5rem; letter-spacing: 5px; color:#333; margin-bottom: 10px;">BIOMETRIC STRESS SCANNER</div>
+        <div class="shadow-meter"><div id="fill"></div></div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('osc');
+    const ctx = canvas.getContext('2d');
+    const fill = document.getElementById('fill');
+    const status = document.getElementById('status');
+    const paywall = document.getElementById('paywall');
+    const disclaimer = document.getElementById('disclaimer');
+    const verTag = document.getElementById('ver-tag');
+    
+    let audioCtx, analyser, dataArray, active = false;
+    let usageCount = parseInt(localStorage.getItem('st_usage') || 0);
+    let isActivated = localStorage.getItem('st_pro_status') === 'true';
+
+    function updateUI() {
+        if (isActivated) {
+            verTag.innerText = "VER: PRO (NELIMITAT)";
+            verTag.style.color = "#FFA500";
+        }
+    }
+
+    async function initAudio() {
+        if (!isActivated && usageCount >= 30) {
+            paywall.style.display = 'flex';
+            disclaimer.style.display = 'none';
+            return;
+        }
+
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioCtx.createMediaStreamSource(stream);
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512;
+            source.connect(analyser);
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            active = true;
+            disclaimer.style.display = 'none';
+            
+            if (!isActivated) {
+                usageCount++;
+                localStorage.setItem('st_usage', usageCount);
+            }
+            draw();
+        } catch (e) { alert("Acces microfon necesar pentru audit."); }
+    }
+
+    function draw() {
+        if (!active) return;
+        requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(dataArray);
+        
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.beginPath();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#FF003C';
+        let x = 0;
+        let sliceWidth = canvas.width / dataArray.length;
+        let stressSum = 0;
+
+        for(let i = 0; i < dataArray.length; i++) {
+            let v = dataArray[i] / 128.0;
+            let y = v * canvas.height / 2.5;
+            if(i === 0) ctx.moveTo(x, canvas.height/2 + (y/2)); 
+            else ctx.lineTo(x, canvas.height/2 - (y/2));
+            x += sliceWidth;
+            if(i > 20 && i < 80) stressSum += dataArray[i];
+        }
+        ctx.stroke();
+
+        let stressLevel = Math.min(100, (stressSum / 75));
+        fill.style.width = stressLevel + '%';
+        status.innerText = stressLevel > 75 ? "ANOMALIE VOCALĂ DETECTATĂ" : "SEMNAL BIOMETRIC STABIL";
+        status.style.color = stressLevel > 75 ? "#FF003C" : "#555";
+    }
+
+    function sendSecureRequest() {
+        // Subiectul pentru filtrul Gmail
+        const subject = "Activare SHADOW #PRO";
+        const body = "Am efectuat plata. Solicit codul de activare PRO.";
+        window.location.href = `mailto:sambatalaopt@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+
+    function verifyLicense() {
+        const inputCode = document.getElementById('activationCode').value.trim().toUpperCase();
+        if (inputCode === "AUDIO DEMASCARE TOTALA 2026") {
+            localStorage.setItem('st_pro_status', 'true');
+            alert("PROTOCOL PRO ACTIVAT. ACCES NELIMITAT CONFIRMAT.");
+            location.reload();
+        } else {
+            alert("COD INVALID. VERIFICĂ EMAILUL.");
+        }
+    }
+
+    updateUI();
+    document.getElementById('start-btn').onclick = initAudio;
+</script>
+</body>
+</html>
