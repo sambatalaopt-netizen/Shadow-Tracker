@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SHADOW TRACKER | Audit Vocal PRO</title>
+    <title>SHADOW TRACKER | Audit Vocal</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -29,12 +29,12 @@
         .header { padding: 30px; text-align: center; border-bottom: 1px solid #111; position: relative; }
         .header h1 { font-size: 0.8rem; letter-spacing: 8px; color: #444; margin: 0; }
         #status { font-size: 0.6rem; color: var(--accent); margin-top: 10px; letter-spacing: 2px; font-weight: bold; }
-        #ver-tag { position: absolute; top: 10px; right: 10px; font-size: 0.5rem; color: #333; letter-spacing: 2px; }
 
-        /* Vizualizer Scena */
-        .viz-container { flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; }
-        canvas { width: 100%; height: 350px; filter: drop-shadow(0 0 15px var(--accent)); }
-        .meter-ui { position: absolute; bottom: 80px; width: 85%; text-align: center; }
+        /* Vizualizer Scena - Centrat si Full */
+        .viz-container { flex-grow: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        canvas { width: 100%; height: 100%; position: absolute; filter: drop-shadow(0 0 15px var(--accent)); }
+        
+        .meter-ui { position: absolute; bottom: 80px; width: 85%; max-width: 600px; text-align: center; z-index: 10; }
         .shadow-meter { width: 100%; height: 1px; background: #222; overflow: visible; }
         #fill { width: 0%; height: 100%; background: var(--accent); box-shadow: 0 0 40px var(--accent); transition: width 0.15s ease-out; }
     </style>
@@ -60,7 +60,6 @@
 </div>
 
 <div class="header">
-    <span id="ver-tag">VER: STANDARD</span>
     <h1>SHADOW TRACKER v1.0</h1>
     <div id="status">SISTEM ÎN AȘTEPTARE...</div>
 </div>
@@ -80,18 +79,18 @@
     const status = document.getElementById('status');
     const paywall = document.getElementById('paywall');
     const disclaimer = document.getElementById('disclaimer');
-    const verTag = document.getElementById('ver-tag');
     
     let audioCtx, analyser, dataArray, active = false;
     let usageCount = parseInt(localStorage.getItem('st_usage') || 0);
     let isActivated = localStorage.getItem('st_pro_status') === 'true';
 
-    function updateUI() {
-        if (isActivated) {
-            verTag.innerText = "VER: PRO (NELIMITAT)";
-            verTag.style.color = "#FFA500";
-        }
+    // Ajustare Canvas la incarcare si redimensionare
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = canvas.parentElement.clientHeight;
     }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
     async function initAudio() {
         if (!isActivated && usageCount >= 30) {
@@ -105,7 +104,10 @@
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const source = audioCtx.createMediaStreamSource(stream);
             analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 512;
+            
+            // FFT Size redus pentru viteza pe PC si mobil
+            analyser.fftSize = 512; 
+            
             source.connect(analyser);
             dataArray = new Uint8Array(analyser.frequencyBinCount);
             active = true;
@@ -124,30 +126,52 @@
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
         
-        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
+        // Efect de "Urma" (Fade)
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         ctx.beginPath();
         ctx.lineWidth = 3;
         ctx.strokeStyle = '#FF003C';
-        let x = 0;
+        
+        // Centrare si Intindere pe tot ecranul
         let sliceWidth = canvas.width / dataArray.length;
+        let x = 0;
         let stressSum = 0;
 
         for(let i = 0; i < dataArray.length; i++) {
-            let v = dataArray[i] / 128.0;
-            let y = v * canvas.height / 2.5;
-            if(i === 0) ctx.moveTo(x, canvas.height/2 + (y/2)); 
-            else ctx.lineTo(x, canvas.height/2 - (y/2));
+            let v = dataArray[i] / 128.0; // Amplitudine (0-2)
+            let y = v * canvas.height / 2.5; // Scalare pe inaltime
+
+            if(i === 0) {
+                ctx.moveTo(x, canvas.height/2 + (y/2)); 
+            } else {
+                // Alternam desenarea sus/jos pentru efect de unda completa
+                ctx.lineTo(x, canvas.height/2 - (y/2));
+            }
+
             x += sliceWidth;
-            if(i > 20 && i < 80) stressSum += dataArray[i];
+            if(i > 20 && i < 80) stressSum += dataArray[i]; // Calcul stres
         }
+        
+        // Inchidem linia la mijloc la final
+        ctx.lineTo(canvas.width, canvas.height/2);
         ctx.stroke();
 
+        // Actualizare Status si Meter
         let stressLevel = Math.min(100, (stressSum / 75));
         fill.style.width = stressLevel + '%';
-        status.innerText = stressLevel > 75 ? "ANOMALIE VOCALĂ DETECTATĂ" : "SEMNAL BIOMETRIC STABIL";
-        status.style.color = stressLevel > 75 ? "#FF003C" : "#555";
+        
+        if (stressLevel > 75) {
+            status.innerText = "ANOMALIE VOCALĂ DETECTATĂ";
+            status.style.color = "#FF003C";
+        } else if (stressSum > 100) {
+            status.innerText = "SEMNAL BIOMETRIC STABIL";
+            status.style.color = "#555";
+        } else {
+            status.innerText = "SISTEM ÎN AȘTEPTARE (LINIȘTE)";
+            status.style.color = "#222";
+        }
     }
 
     function sendSecureRequest() {
@@ -168,7 +192,6 @@
         }
     }
 
-    updateUI();
     document.getElementById('start-btn').onclick = initAudio;
 </script>
 </body>
