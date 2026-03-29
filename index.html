@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHADOW TRACKER | BIO-AUDIT</title>
+    <title>SHADOW TRACKER | 4K AUDIT</title>
     <style>
         :root { --bg: #050505; --accent: #FF003C; --limit: #FFD700; }
-        body { margin: 0; background: var(--bg); color: white; font-family: 'Courier New', monospace; overflow: hidden; }
-        #header { padding: 15px; border-bottom: 1px solid #111; text-align: center; background: #000; letter-spacing: 5px; color: #444; font-size: 0.8rem; }
-        canvas { width: 100vw; height: calc(100vh - 120px); display: block; }
-        .footer { height: 60px; background: #080808; border-top: 1px solid #111; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #555; letter-spacing: 2px; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        #header { padding: 20px; border-bottom: 1px solid #111; text-align: center; background: #000; letter-spacing: 8px; color: #333; font-size: 1rem; text-transform: uppercase; }
+        canvas { width: 100vw; flex-grow: 1; display: block; }
+        .footer { height: 80px; background: #080808; border-top: 1px solid #111; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: #444; letter-spacing: 3px; font-weight: bold; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; }
-        button { background: var(--accent); color: white; border: none; padding: 20px 60px; cursor: pointer; font-weight: bold; letter-spacing: 5px; text-transform: uppercase; }
+        button { background: var(--accent); color: white; border: none; padding: 25px 80px; cursor: pointer; font-weight: bold; letter-spacing: 5px; text-transform: uppercase; font-size: 1.2rem; box-shadow: 0 0 40px rgba(255,0,60,0.4); }
     </style>
 </head>
 <body>
-    <div id="overlay"><button onclick="start()">LANSEAZĂ AUDITUL</button></div>
-    <div id="header">SHADOW TRACKER v2.2 | ANALIZĂ BIOMETRICĂ ÎN TIMP REAL</div>
+    <div id="overlay"><button onclick="start()">LANSEAZĂ AUDITUL BIOMETRIC</button></div>
+    <div id="header">SHADOW TRACKER v2.4 | ULTRA-WIDE 4K AUDIT SYSTEM</div>
     <canvas id="visualizer"></canvas>
-    <div class="footer" id="status-bar">SISTEM ÎN AȘTEPTARE...</div>
+    <div class="footer" id="status-bar">SISTEM ÎN AȘTEPTARE - CALIBRARE 4K...</div>
 
 <script>
     const canvas = document.getElementById('visualizer');
@@ -27,10 +27,12 @@
     let audioCtx, analyser, freqArray;
 
     function resize() {
+        // Fortam rezolutia interna a canvas-ului sa fie egala cu cea a ecranului (4K ready)
         canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - 120;
+        canvas.height = window.innerHeight - 180;
     }
-    window.onresize = resize; resize();
+    window.onresize = resize; 
+    resize();
 
     async function start() {
         document.getElementById('overlay').style.display = 'none';
@@ -38,7 +40,11 @@
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256; // Mai putine bare, dar mai late si mai vizibile
+        
+        // FFT Size 512 ofera 256 de benzi de frecventa, perfect pentru vizualizare clara
+        analyser.fftSize = 512; 
+        analyser.smoothingTimeConstant = 0.8;
+        
         source.connect(analyser);
         freqArray = new Uint8Array(analyser.frequencyBinCount);
         draw();
@@ -47,37 +53,55 @@
     function draw() {
         requestAnimationFrame(draw);
         analyser.getByteFrequencyData(freqArray);
+        
         ctx.fillStyle = '#050505';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const limitY = canvas.height * 0.35; // Linia la 65% inaltime
+        const limitY = canvas.height * 0.35; // Pragul de 65% inaltime
+        
+        // CALCUL MATEMATIC PENTRU UMPLEREA ECRANULUI 4K
+        // Luam latimea canvas-ului si o impartim exact la numarul de bare primite
         let barWidth = canvas.width / freqArray.length;
-        let stressFound = false;
+        let stressDetected = false;
 
         for(let i = 0; i < freqArray.length; i++) {
+            // Normalizam inaltimea barei
             let barHeight = (freqArray[i] / 255) * canvas.height;
-            let currentY = canvas.height - barHeight;
+            let xPos = i * barWidth;
+            let yPos = canvas.height - barHeight;
 
-            if (currentY < limitY) {
+            // Logica de detectie (doar pentru frecventele relevante vocii)
+            if (yPos < limitY && i > 5) { 
                 ctx.fillStyle = '#FF003C';
-                stressFound = true;
+                stressDetected = true;
             } else {
-                ctx.fillStyle = '#111';
+                ctx.fillStyle = '#111'; // Gri inchis sub prag
             }
-            ctx.fillRect(i * barWidth, currentY, barWidth - 2, barHeight);
+            
+            // Desenam bara fara spatii (gap 0) pentru a crea o suprafata continua pe 4K
+            ctx.fillRect(xPos, yPos, barWidth, barHeight);
         }
 
-        // LINIA GALBENĂ
+        // LINIA GALBENĂ DE LIMITĂ (THRESHOLD)
         ctx.strokeStyle = '#FFD700';
-        ctx.setLineDash([10, 10]);
-        ctx.beginPath(); ctx.moveTo(0, limitY); ctx.lineTo(canvas.width, limitY); ctx.stroke();
+        ctx.setLineDash([20, 20]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, limitY);
+        ctx.lineTo(canvas.width, limitY);
+        ctx.stroke();
+        ctx.setLineDash([]);
         
-        if (stressFound) {
-            statusBar.innerText = "ANOMALIE DETECTATĂ: DEPĂȘIRE PRAG INTEGRITATE";
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+        ctx.font = '14px Courier New';
+        ctx.fillText("PRAG DE INTEGRITATE DISCURS (THRESHOLD)", 30, limitY - 15);
+
+        if (stressDetected) {
+            statusBar.innerText = "ALERTA: ANOMALIE BIOMETRICA DETECTATA - DISCURS TENSIONAT";
             statusBar.style.color = "#FF003C";
         } else {
-            statusBar.innerText = "MONITORIZARE: SEMNAL ÎN PARAMETRI NORMALI";
-            statusBar.style.color = "#555";
+            statusBar.innerText = "STATUS: MONITORIZARE FRECVENTE... SEMNAL STABIL";
+            statusBar.style.color = "#444";
         }
     }
 </script>
